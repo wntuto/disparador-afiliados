@@ -91,7 +91,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Basic Auth para o painel e a API (o webhook usa segredo próprio).
   app.addHook('onRequest', async (req, reply) => {
-    if (!config.panelPassword || req.url.startsWith('/webhooks/')) return;
+    if (!config.panelPassword || req.url.startsWith('/webhooks/') || req.url === '/health') return;
     const [scheme, encoded] = (req.headers.authorization ?? '').split(' ');
     const [user, pass] = Buffer.from(encoded ?? '', 'base64').toString().split(':');
     if (scheme !== 'Basic' || !safeEqual(user ?? '', config.panelUser) || !safeEqual(pass ?? '', config.panelPassword)) {
@@ -100,6 +100,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   await app.register(fastifyStatic, { root: fileURLToPath(new URL('../public', import.meta.url)) });
+
+  app.get('/health', async () => ({ ok: true }));
 
   app.get('/api/status', async () => ({
     zapster: !!config.zapster.token,

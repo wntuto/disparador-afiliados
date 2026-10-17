@@ -34,6 +34,13 @@ npm start                # http://localhost:3000
 npm test                 # testes unitários
 ```
 
+## Hospedagem (Railway)
+
+1. Crie um projeto no Railway a partir deste repositório do GitHub (ele usa o `Dockerfile`).
+2. Adicione um **Volume** montado em `/data`, para o banco não se perder a cada deploy.
+3. Em Variables, cadastre as variáveis do `.env.example` (com `PANEL_PASSWORD` preenchida).
+4. Em Settings > Networking, gere um domínio. Esse é o link do painel.
+
 ## O que você precisa ter
 
 1. **ZapsterAPI**: uma instância conectada ao seu WhatsApp (QR code) e um token em app.zapsterapi.com/tokens. Preencha `ZAPSTER_TOKEN` e `ZAPSTER_INSTANCE_ID`.
