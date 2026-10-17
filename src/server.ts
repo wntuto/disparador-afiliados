@@ -7,13 +7,14 @@ import { createDispatcher } from './dispatcher.ts';
 import { createScheduler } from './scheduler.ts';
 import { buildApp } from './app.ts';
 import { loadSettings } from './settings.ts';
+import { createAutoPicker } from './autoOffers.ts';
 
 const repo = openDb(config.dbPath);
 loadSettings(repo, config);
 const shopee = createShopeeClient(config.shopee);
 const ml = createMlClient(config.mercadoLivre);
 const zapster = createZapsterClient(config.zapster);
-const dispatcher = createDispatcher(repo, zapster, () => config.zapster.sendDelayMs);
+const dispatcher = createDispatcher(repo, zapster, () => config.zapster.sendDelayMs, undefined, createAutoPicker(repo, shopee));
 const scheduler = createScheduler(repo, dispatcher, config.timezone);
 
 const app = await buildApp({ config, repo, shopee, ml, dispatcher, scheduler, zapster });

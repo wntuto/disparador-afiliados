@@ -4,6 +4,8 @@ import { dirname } from 'node:path';
 
 export type Platform = 'shopee' | 'mercadolivre';
 export type CampaignMode = 'manual' | 'once' | 'recurring';
+/** list: ofertas escolhidas à mão; shopee_auto: busca na Shopee por palavra-chave a cada execução */
+export type CampaignSource = 'list' | 'shopee_auto';
 
 export interface Group {
   id: number;
@@ -38,6 +40,10 @@ export interface Campaign {
   run_at: string | null; // ISO, para mode = once
   cron: string | null; // expressão cron, para mode = recurring
   send_image: number;
+  source: CampaignSource;
+  keywords: string[];
+  sort_type: number;
+  min_commission: number | null;
   next_offer_index: number;
   active: number;
   last_run_at: string | null;
@@ -111,11 +117,29 @@ CREATE TABLE IF NOT EXISTS settings (
 
 type Row = Record<string, unknown>;
 
+/** Colunas adicionadas depois da v0.1; ALTER falha se já existirem, o que é esperado. */
+function migrate(db: DatabaseSync) {
+  const cols = [
+    "ALTER TABLE campaigns ADD COLUMN source TEXT NOT NULL DEFAULT 'list'",
+    "ALTER TABLE campaigns ADD COLUMN keywords TEXT NOT NULL DEFAULT '[]'",
+    'ALTER TABLE campaigns ADD COLUMN sort_type INTEGER NOT NULL DEFAULT 2',
+    'ALTER TABLE campaigns ADD COLUMN min_commission REAL',
+  ];
+  for (const sql of cols) {
+    try {
+      db.exec(sql);
+    } catch {
+      /* coluna já existe */
+    }
+  }
+}
+
 function toCampaign(row: Row): Campaign {
   return {
     ...(row as unknown as Campaign),
     group_ids: JSON.parse(String(row.group_ids)),
     offer_ids: JSON.parse(String(row.offer_ids)),
+    keywords: JSON.parse(String(row.keywords ?? '[]')),
   };
 }
 
@@ -124,6 +148,7 @@ export function openDb(path: string) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
   return createRepo(db);
 }
 
@@ -181,11 +206,13 @@ function createRepo(db: DatabaseSync) {
       return row ? toCampaign(row) : undefined;
     },
     createCampaign(
-      c: Pick<Campaign, 'name' | 'template' | 'group_ids' | 'offer_ids' | 'mode' | 'run_at' | 'cron' | 'send_image'>,
+      c: Pick<Campaign, 'name' | 'template' | 'group_ids' | 'offer_ids' | 'mode' | 'run_at' | 'cron' | 'send_image'> &
+        Partial<Pick<Campaign, 'source' | 'keywords' | 'sort_type' | 'min_commission'>>,
     ): Campaign {
       const r = run(
-        `INSERT INTO campaigns (name, template, group_ids, offer_ids, mode, run_at, cron, send_image)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO campaigns (name, template, group_ids, offer_ids, mode, run_at, cron, send_image,
+           source, keywords, sort_type, min_commission)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         c.name,
         c.template,
         JSON.stringify(c.group_ids),
@@ -194,6 +221,10 @@ function createRepo(db: DatabaseSync) {
         c.run_at,
         c.cron,
         c.send_image,
+        c.source ?? 'list',
+        JSON.stringify(c.keywords ?? []),
+        c.sort_type ?? 2,
+        c.min_commission ?? null,
       );
       return this.getCampaign(Number(r.lastInsertRowid))!;
     },
@@ -216,6 +247,20 @@ function createRepo(db: DatabaseSync) {
       ).map(toCampaign),
     activeRecurringCampaigns: () =>
       all<Row>(`SELECT * FROM campaigns WHERE mode = 'recurring' AND active = 1`).map(toCampaign),
+
+    findOfferByExternalId: (platform: Platform, externalId: string) =>
+      get<Offer>('SELECT * FROM offers WHERE platform = ? AND external_id = ? ORDER BY id DESC LIMIT 1', platform, externalId),
+    /** IDs externos de ofertas enviadas com sucesso nos últimos N dias (para não repetir produto). */
+    recentlySentExternalIds(platform: Platform, days: number): Set<string> {
+      const rows = all<{ external_id: string }>(
+        `SELECT DISTINCT o.external_id FROM sends s JOIN offers o ON o.id = s.offer_id
+         WHERE o.platform = ? AND o.external_id IS NOT NULL AND s.status = 'sent'
+           AND s.created_at >= datetime('now', ?)`,
+        platform,
+        `-${days} days`,
+      );
+      return new Set(rows.map((r) => r.external_id));
+    },
 
     // Configurações salvas pelo painel
     getSettings: () =>

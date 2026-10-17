@@ -42,11 +42,20 @@ const campaignBody = z
     name: z.string().min(1),
     template: z.string().nullable().optional(),
     group_ids: z.array(z.number().int()).min(1),
-    offer_ids: z.array(z.number().int()).min(1),
+    offer_ids: z.array(z.number().int()).default([]),
     mode: z.enum(['manual', 'once', 'recurring']),
     run_at: z.string().datetime({ offset: true }).nullable().optional(),
     cron: z.string().nullable().optional(),
     send_image: z.boolean().default(true),
+    source: z.enum(['list', 'shopee_auto']).default('list'),
+    keywords: z.array(z.string().trim().min(1)).default([]),
+    sort_type: z.number().int().min(1).max(5).default(2),
+    min_commission: z.number().min(0).max(100).nullable().optional(),
+  })
+  .refine((c) => c.source !== 'list' || c.offer_ids.length > 0, { message: 'Selecione ao menos uma oferta', path: ['offer_ids'] })
+  .refine((c) => c.source !== 'shopee_auto' || c.keywords.length > 0, {
+    message: 'Informe ao menos uma palavra-chave',
+    path: ['keywords'],
   })
   .refine((c) => c.mode !== 'once' || !!c.run_at, { message: 'run_at é obrigatório para disparo único', path: ['run_at'] })
   .refine((c) => c.mode !== 'recurring' || (!!c.cron && cron.validate(c.cron)), {
@@ -289,6 +298,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       run_at: b.mode === 'once' ? new Date(b.run_at!).toISOString() : null,
       cron: b.mode === 'recurring' ? b.cron! : null,
       send_image: b.send_image ? 1 : 0,
+      source: b.source,
+      keywords: b.keywords,
+      sort_type: b.sort_type,
+      min_commission: b.min_commission ?? null,
     });
     scheduler.sync();
     return c;

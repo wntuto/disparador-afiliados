@@ -20,6 +20,7 @@ Painel web para montar ofertas com link de afiliado da Shopee e do Mercado Livre
 | Mercado Livre | `src/providers/mercadolivre.ts` | Gera link de afiliado anexando `matt_word`/`matt_tool`, ou usa link pronto do painel (`mercadolivre.com/sec/...`). Lê título/preço/foto da API pública quando possível. |
 | ZapsterAPI | `src/zapster.ts` | Envio de texto ou imagem com legenda, fila de 1 chamada por vez (limite de 3 req/s) e nova tentativa em 429. |
 | Disparo | `src/dispatcher.ts` | Envia para cada grupo com pausa (`SEND_DELAY_MS`) e grava histórico. |
+| Ofertas automáticas | `src/autoOffers.ts` | Agendamento que busca na Shopee por palavra-chave, escolhe o melhor produto ainda não enviado nos últimos 7 dias (com comissão mínima opcional) e dispara. |
 | Agendador | `src/scheduler.ts` | Campanhas "uma vez" (data/hora) e "recorrentes" (cron, fuso `TZ`). Recorrentes enviam a próxima oferta da lista em rodízio. |
 | API + painel | `src/app.ts`, `public/index.html` | Rotas REST e painel em uma página. |
 

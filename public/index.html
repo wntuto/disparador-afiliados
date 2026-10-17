@@ -139,7 +139,21 @@
         </div>
       </div>
       <p class="muted" id="c-hint">Envia todas as ofertas selecionadas para os grupos no horário escolhido.</p>
-      <label>Ofertas</label><div id="c-offers" class="checks"></div>
+      <div class="row">
+        <div><label for="c-source">De onde vêm as ofertas</label><select id="c-source">
+          <option value="list">Ofertas que eu escolher</option>
+          <option value="shopee_auto">Buscar sozinho na Shopee</option></select></div>
+      </div>
+      <div id="c-list-box"><label style="margin-top:12px">Ofertas</label><div id="c-offers" class="checks"></div></div>
+      <div id="c-auto-box" hidden>
+        <p class="muted">A cada envio, a ferramenta busca na Shopee pela próxima palavra-chave da lista e manda o melhor produto que ainda não foi enviado nos últimos 7 dias.</p>
+        <div class="row">
+          <div style="flex:3 1 260px"><label for="c-keywords">Palavras-chave (separe por vírgula)</label><input id="c-keywords" placeholder="fone bluetooth, air fryer, smartwatch"></div>
+          <div><label for="c-sort">Escolher pelo</label><select id="c-sort">
+            <option value="2">Mais vendido</option><option value="5">Maior comissão</option><option value="1">Mais relevante</option></select></div>
+          <div><label for="c-mincomm">Comissão mínima (%)</label><input id="c-mincomm" type="number" min="0" max="100" step="0.5" placeholder="opcional"></div>
+        </div>
+      </div>
       <label style="margin-top:12px">Grupos</label><div id="c-groups" class="checks"></div>
       <div class="checks"><label><input type="checkbox" id="c-img" checked> Enviar com a foto do produto</label></div>
       <div class="row" style="margin-top:12px"><button class="primary" id="c-btn">Salvar agendamento</button></div>
@@ -299,11 +313,18 @@ $('#c-mode').onchange = () => {
   $('#c-when-rec').style.display = m === 'recurring' ? '' : 'none';
   $('#c-hint').textContent = hints[m];
 };
+$('#c-source').onchange = () => {
+  const auto = $('#c-source').value === 'shopee_auto';
+  $('#c-auto-box').hidden = !auto; $('#c-list-box').hidden = auto;
+};
 $('#c-cron-preset').onchange = () => $('#c-cron').style.display = $('#c-cron-preset').value === 'custom' ? '' : 'none';
 
 $('#c-btn').onclick = run(async () => {
   const mode = $('#c-mode').value;
-  const body = { name: $('#c-name').value, mode, offer_ids: checked($('#c-offers')), group_ids: checked($('#c-groups')), send_image: $('#c-img').checked, template: $('#d-tpl').value || null };
+  const source = $('#c-source').value;
+  const body = { name: $('#c-name').value, mode, source, offer_ids: source === 'list' ? checked($('#c-offers')) : [],
+    keywords: source === 'shopee_auto' ? $('#c-keywords').value.split(',').map((k) => k.trim()).filter(Boolean) : [],
+    sort_type: Number($('#c-sort').value), min_commission: $('#c-mincomm').value ? Number($('#c-mincomm').value) : null, group_ids: checked($('#c-groups')), send_image: $('#c-img').checked, template: $('#d-tpl').value || null };
   if (mode === 'once') { if (!$('#c-runat').value) throw new Error('Escolha data e hora'); body.run_at = new Date($('#c-runat').value).toISOString(); }
   if (mode === 'recurring') body.cron = $('#c-cron-preset').value === 'custom' ? $('#c-cron').value : $('#c-cron-preset').value;
   await api('/api/campaigns', { method:'POST', body }); toast('Agendamento salvo'); loadCampaigns();
@@ -312,10 +333,10 @@ $('#c-btn').onclick = run(async () => {
 const modeLabel = { once:'Uma vez', recurring:'Recorrente', manual:'Manual' };
 async function loadCampaigns() {
   const cs = await api('/api/campaigns');
-  $('#camps-tbl').innerHTML = '<tr><th>Nome</th><th>Tipo</th><th>Quando</th><th>Ofertas / grupos</th><th>Ativo</th><th></th></tr>' + cs.map((c) => `
+  $('#camps-tbl').innerHTML = '<tr><th>Nome</th><th>Tipo</th><th>Quando</th><th>Ofertas</th><th>Ativo</th><th></th></tr>' + cs.map((c) => `
     <tr><td>${esc(c.name)}</td><td>${modeLabel[c.mode]}</td>
     <td class="muted">${c.mode === 'once' ? new Date(c.run_at).toLocaleString('pt-BR') : c.mode === 'recurring' ? esc(c.cron) : '-'}${c.last_run_at ? `<div>última: ${new Date(c.last_run_at + 'Z').toLocaleString('pt-BR')}</div>` : ''}</td>
-    <td>${c.offer_ids.length} / ${c.group_ids.length}</td>
+    <td>${c.source === 'shopee_auto' ? `<span class="tag shopee">Auto</span> ${esc(c.keywords.join(', '))}` : c.offer_ids.length + ' oferta(s)'}<div class="muted">${c.group_ids.length} grupo(s)</div></td>
     <td><input type="checkbox" ${c.active ? 'checked' : ''} onchange="toggleCamp(${c.id}, this.checked)"></td>
     <td style="white-space:nowrap"><button class="sec" onclick="runCamp(${c.id})">Disparar</button> <button class="sec" onclick="delCamp(${c.id})">Excluir</button></td></tr>`).join('');
 }

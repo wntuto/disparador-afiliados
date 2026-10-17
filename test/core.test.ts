@@ -153,3 +153,34 @@ test('configurações do painel sobrescrevem o env e mascaram segredos', async (
   loadSettings(repo, fresh);
   assert.equal(fresh.zapster.token, 'abc123456');
 });
+
+test('ofertas automáticas: escolhe produto novo com comissão mínima e roda as palavras-chave', async () => {
+  const { createAutoPicker } = await import('../src/autoOffers.ts');
+  const repo = openDb(':memory:');
+  const g = repo.upsertGroup('A', 'group:1');
+  const searched: string[] = [];
+  const prod = (id: string, rate: number) => ({
+    itemId: id, productName: 'P' + id, price: 10, priceMin: 10, priceMax: 10, priceDiscountRate: 0, commissionRate: rate,
+    sales: 1, ratingStar: 5, imageUrl: null, shopName: null, productLink: 'https://shopee.com.br/p' + id, offerLink: 'https://s.shopee.com.br/' + id,
+  });
+  const shopee: any = {
+    async searchProducts(s: any) {
+      searched.push(s.keyword);
+      return { items: [prod('1', 0.02), prod('2', 0.1), prod('3', 0.1)], hasNextPage: false };
+    },
+  };
+  const sent: string[] = [];
+  const zapster: any = { async sendMessage(i: any) { sent.push(i.text); return { messageId: 'm' }; } };
+  const d = createDispatcher(repo, zapster, 0, noSleep, createAutoPicker(repo, shopee));
+  const camp = repo.createCampaign({
+    name: 'auto', template: '{link}', group_ids: [g.id], offer_ids: [], mode: 'recurring', run_at: null, cron: '0 9 * * *',
+    send_image: 0, source: 'shopee_auto', keywords: ['fone', 'air fryer'], sort_type: 2, min_commission: 5,
+  });
+  await d.runCampaign(repo.getCampaign(camp.id)!);
+  await d.runCampaign(repo.getCampaign(camp.id)!);
+  const r3 = await d.runCampaign(repo.getCampaign(camp.id)!);
+  assert.deepEqual(searched, ['fone', 'air fryer', 'fone']);
+  // produto 1 tem comissão abaixo de 5%; 2 e 3 não se repetem dentro de 7 dias
+  assert.deepEqual(sent, ['https://s.shopee.com.br/2', 'https://s.shopee.com.br/3']);
+  assert.match(r3.errors[0], /Nenhum produto novo/);
+});

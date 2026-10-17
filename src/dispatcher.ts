@@ -1,6 +1,7 @@
 import type { Campaign, Repo } from './db.ts';
 import type { ZapsterClient } from './zapster.ts';
 import { renderMessage } from './message.ts';
+import type { AutoPicker } from './autoOffers.ts';
 
 export interface DispatchOptions {
   campaignId?: number | null;
@@ -19,6 +20,7 @@ export function createDispatcher(
   zapster: ZapsterClient,
   sendDelayMs: number | (() => number),
   sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)),
+  autoPicker?: AutoPicker,
 ) {
   const running = new Set<number>();
   const delay = () => (typeof sendDelayMs === 'function' ? sendDelayMs() : sendDelayMs);
@@ -59,6 +61,7 @@ export function createDispatcher(
     running.add(campaign.id);
     try {
       const total: DispatchSummary = { sent: 0, failed: 0, errors: [] };
+      if (campaign.source === 'shopee_auto') return await runAuto(campaign, total);
       if (!campaign.offer_ids.length) {
         total.errors.push('Campanha sem ofertas');
         return total;
@@ -83,6 +86,35 @@ export function createDispatcher(
     } finally {
       running.delete(campaign.id);
     }
+  }
+
+  /** Cada execução usa a próxima palavra-chave da lista e envia o melhor produto ainda não enviado. */
+  async function runAuto(campaign: Campaign, total: DispatchSummary): Promise<DispatchSummary> {
+    if (!autoPicker) throw new Error('Busca automática da Shopee indisponível');
+    if (!campaign.keywords.length) {
+      total.errors.push('Campanha sem palavras-chave');
+      return total;
+    }
+    const index = campaign.next_offer_index % campaign.keywords.length;
+    const keyword = campaign.keywords[index];
+    try {
+      const offer = await autoPicker(keyword, campaign.sort_type, campaign.min_commission);
+      if (!offer) total.errors.push(`Nenhum produto novo encontrado para "${keyword}"`);
+      else {
+        const s = await dispatchOffer(offer.id, campaign.group_ids, {
+          campaignId: campaign.id,
+          template: campaign.template,
+          sendImage: !!campaign.send_image,
+        });
+        total.sent += s.sent;
+        total.failed += s.failed;
+        total.errors.push(...s.errors);
+      }
+    } catch (err) {
+      total.errors.push(`Busca "${keyword}": ${err instanceof Error ? err.message : String(err)}`);
+    }
+    repo.markCampaignRun(campaign.id, index + 1, campaign.mode === 'once');
+    return total;
   }
 
   return { dispatchOffer, runCampaign };
