@@ -17,10 +17,11 @@ export interface DispatchSummary {
 export function createDispatcher(
   repo: Repo,
   zapster: ZapsterClient,
-  sendDelayMs: number,
+  sendDelayMs: number | (() => number),
   sleep = (ms: number) => new Promise((r) => setTimeout(r, ms)),
 ) {
   const running = new Set<number>();
+  const delay = () => (typeof sendDelayMs === 'function' ? sendDelayMs() : sendDelayMs);
 
   async function dispatchOffer(offerId: number, groupIds: number[], opts: DispatchOptions = {}): Promise<DispatchSummary> {
     const offer = repo.getOffer(offerId);
@@ -30,7 +31,7 @@ export function createDispatcher(
     const summary: DispatchSummary = { sent: 0, failed: 0, errors: [] };
 
     for (const [i, group] of groups.entries()) {
-      if (i > 0 && sendDelayMs > 0) await sleep(sendDelayMs);
+      if (i > 0 && delay() > 0) await sleep(delay());
       try {
         const { messageId } = await zapster.sendMessage({
           recipient: group!.recipient,
@@ -67,7 +68,7 @@ export function createDispatcher(
       const offerIds = isRecurring ? [campaign.offer_ids[index]] : campaign.offer_ids;
 
       for (const [i, offerId] of offerIds.entries()) {
-        if (i > 0 && sendDelayMs > 0) await sleep(sendDelayMs);
+        if (i > 0 && delay() > 0) await sleep(delay());
         const s = await dispatchOffer(offerId, campaign.group_ids, {
           campaignId: campaign.id,
           template: campaign.template,

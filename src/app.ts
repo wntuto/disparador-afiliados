@@ -14,6 +14,8 @@ import type { Dispatcher } from './dispatcher.ts';
 import type { Scheduler } from './scheduler.ts';
 import { normalizeGroupRecipient } from './zapster.ts';
 import { DEFAULT_TEMPLATE, renderMessage } from './message.ts';
+import type { ZapsterClient } from './zapster.ts';
+import { describeSettings, saveSettings } from './settings.ts';
 
 export interface AppDeps {
   config: Config;
@@ -22,6 +24,7 @@ export interface AppDeps {
   ml: MlClient;
   dispatcher: Dispatcher;
   scheduler: Pick<Scheduler, 'sync' | 'scheduledCount'>;
+  zapster?: ZapsterClient;
 }
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
@@ -78,7 +81,7 @@ export function extractGroupsFromPayload(payload: unknown): { recipient: string;
 }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
-  const { config, repo, shopee, ml, dispatcher, scheduler } = deps;
+  const { config, repo, shopee, ml, dispatcher, scheduler, zapster } = deps;
   const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
 
   app.setErrorHandler((err, _req, reply) => {
@@ -91,7 +94,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Basic Auth para o painel e a API (o webhook usa segredo próprio).
   app.addHook('onRequest', async (req, reply) => {
-    if (!config.panelPassword || req.url.startsWith('/webhooks/') || req.url === '/health') return;
+    if (req.url.startsWith('/webhooks/') || req.url === '/health') return;
+    if (!config.panelPassword) {
+      // Em produção o painel nunca fica aberto sem senha.
+      if (process.env.NODE_ENV === 'production') {
+        return reply.status(503).type('text/plain; charset=utf-8')
+          .send('Painel bloqueado: cadastre a variável PANEL_PASSWORD no servidor (no Railway: aba Variables) e aguarde reiniciar.');
+      }
+      return;
+    }
     const [scheme, encoded] = (req.headers.authorization ?? '').split(' ');
     const [user, pass] = Buffer.from(encoded ?? '', 'base64').toString().split(':');
     if (scheme !== 'Basic' || !safeEqual(user ?? '', config.panelUser) || !safeEqual(pass ?? '', config.panelPassword)) {
@@ -113,6 +124,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     defaultTemplate: DEFAULT_TEMPLATE,
     timezone: config.timezone,
   }));
+
+  // ---- Configurações (chaves das integrações) ----
+  app.get('/api/settings', async () => describeSettings(config));
+  app.put('/api/settings', async (req) => {
+    saveSettings(repo, config, z.record(z.string(), z.string()).parse(req.body));
+    return describeSettings(config);
+  });
+  app.post('/api/settings/test-zapster', async () => {
+    if (!zapster) return { ok: false, error: 'indisponível' };
+    const r = await zapster.listInstances();
+    const list = (r?.instances ?? r?.data ?? []) as any[];
+    const mine = list.find((i) => i.id === config.zapster.instanceId);
+    return { ok: true, instances: list.length, instanceFound: !!mine, instanceStatus: mine?.status ?? null };
+  });
 
   // ---- Grupos ----
   app.get('/api/groups', async () => repo.listGroups());

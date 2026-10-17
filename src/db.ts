@@ -103,6 +103,10 @@ CREATE TABLE IF NOT EXISTS sends (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_sends_created ON sends(created_at DESC);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 `;
 
 type Row = Record<string, unknown>;
@@ -212,6 +216,12 @@ function createRepo(db: DatabaseSync) {
       ).map(toCampaign),
     activeRecurringCampaigns: () =>
       all<Row>(`SELECT * FROM campaigns WHERE mode = 'recurring' AND active = 1`).map(toCampaign),
+
+    // Configurações salvas pelo painel
+    getSettings: () =>
+      Object.fromEntries(all<{ key: string; value: string }>('SELECT key, value FROM settings').map((r) => [r.key, r.value])),
+    setSetting: (key: string, value: string) =>
+      run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value),
 
     // Histórico de envios
     logSend(s: Omit<Send, 'id' | 'created_at'>) {

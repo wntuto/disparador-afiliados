@@ -133,3 +133,23 @@ test('webhook: extrai grupos do payload', () => {
   });
   assert.deepEqual(groups, [{ recipient: 'group:120363012345678901', name: 'Promoções VIP' }]);
 });
+
+test('configurações do painel sobrescrevem o env e mascaram segredos', async () => {
+  const { loadSettings, saveSettings, describeSettings } = await import('../src/settings.ts');
+  const repo = openDb(':memory:');
+  const cfg: any = {
+    zapster: { token: '', instanceId: '', sendDelayMs: 4000 },
+    shopee: { appId: '', secret: '' },
+    mercadoLivre: { mattWord: '', mattTool: '', accessToken: '' },
+  };
+  saveSettings(repo, cfg, { ZAPSTER_TOKEN: 'abc123456', SHOPEE_APP_ID: '999', SEND_DELAY_MS: '6000', ML_MATT_WORD: '  ', HACK: 'x' });
+  assert.equal(cfg.zapster.token, 'abc123456');
+  assert.equal(cfg.zapster.sendDelayMs, 6000);
+  assert.equal(repo.getSettings().HACK, undefined);
+  const d = describeSettings(cfg);
+  assert.equal(d.find((s) => s.key === 'ZAPSTER_TOKEN')!.value, '••••3456');
+  assert.equal(d.find((s) => s.key === 'SHOPEE_APP_ID')!.value, '999');
+  const fresh: any = structuredClone({ ...cfg, zapster: { token: '', instanceId: '', sendDelayMs: 4000 } });
+  loadSettings(repo, fresh);
+  assert.equal(fresh.zapster.token, 'abc123456');
+});

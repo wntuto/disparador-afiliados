@@ -38,8 +38,11 @@ npm test                 # testes unitários
 
 1. Crie um projeto no Railway a partir deste repositório do GitHub (ele usa o `Dockerfile`).
 2. Adicione um **Volume** montado em `/data`, para o banco não se perder a cada deploy.
-3. Em Variables, cadastre as variáveis do `.env.example` (com `PANEL_PASSWORD` preenchida).
+3. Em Variables, cadastre só `PANEL_PASSWORD` (a senha do painel). Sem ela, o painel fica bloqueado.
 4. Em Settings > Networking, gere um domínio. Esse é o link do painel.
+5. Abra o painel e cadastre as chaves da Zapster, da Shopee e do Mercado Livre na aba **Configurações**.
+
+As chaves também podem vir de variáveis de ambiente (veja `.env.example`); o que for salvo no painel tem prioridade.
 
 ## O que você precisa ter
 

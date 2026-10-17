@@ -58,6 +58,7 @@
   <button data-tab="disparar">Disparar agora</button>
   <button data-tab="campanhas">Agendamentos</button>
   <button data-tab="historico">Histórico</button>
+  <button data-tab="config">Configurações</button>
 </nav>
 <main>
   <section id="ofertas" class="active">
@@ -146,6 +147,18 @@
     <div class="card"><div class="tbl"><table id="camps-tbl"></table></div></div>
   </section>
 
+  <section id="config">
+    <div class="card">
+      <h2>Chaves das integrações</h2>
+      <p class="muted">Cole aqui as chaves da Zapster, da Shopee e do Mercado Livre. Campos deixados em branco mantêm o valor atual. As chaves secretas nunca são mostradas de novo, só os 4 últimos caracteres.</p>
+      <div id="cfg-fields" class="row" style="flex-direction:column;align-items:stretch"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" id="cfg-save">Salvar</button>
+        <button class="sec" id="cfg-test">Testar conexão com a Zapster</button>
+      </div>
+    </div>
+  </section>
+
   <section id="historico">
     <div class="card"><div class="tbl"><table id="sends-tbl"></table></div></div>
   </section>
@@ -174,6 +187,27 @@ document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
   b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
   if (b.dataset.tab === 'historico') loadSends();
   if (b.dataset.tab === 'campanhas') loadCampaigns();
+  if (b.dataset.tab === 'config') loadSettings();
+});
+document.querySelectorAll('header .pill').forEach((p) => { p.style.cursor = 'pointer'; p.onclick = () => document.querySelector('nav button[data-tab=config]').click(); });
+
+async function loadSettings() {
+  const list = await api('/api/settings');
+  $('#cfg-fields').innerHTML = list.map((s) => `<div>
+    <label for="cfg-${s.key}">${esc(s.label)} ${s.configured ? '<span class="ok">✓ configurado</span>' : ''}</label>
+    <input id="cfg-${s.key}" data-key="${s.key}" type="${s.secret ? 'password' : 'text'}" autocomplete="off"
+      placeholder="${esc(s.secret ? (s.value || 'não configurado') : '')}" value="${s.secret ? '' : esc(s.value)}"></div>`).join('');
+}
+$('#cfg-save').onclick = run(async () => {
+  const body = {};
+  document.querySelectorAll('#cfg-fields input').forEach((i) => { if (i.value.trim()) body[i.dataset.key] = i.value.trim(); });
+  await api('/api/settings', { method:'PUT', body });
+  toast('Configurações salvas'); loadSettings(); loadStatus();
+});
+$('#cfg-test').onclick = run(async () => {
+  const r = await api('/api/settings/test-zapster', { method:'POST' });
+  if (!r.instanceFound) throw new Error(`Token ok (${r.instances} instância(s)), mas o ID da instância não foi encontrado. Confira o ID.`);
+  toast('Zapster conectada. Status da instância: ' + (r.instanceStatus ?? 'desconhecido'));
 });
 
 function checks(el, items, label) {
@@ -302,7 +336,11 @@ async function loadSends() {
     <td class="${s.status === 'sent' ? 'ok' : 'err'}">${s.status === 'sent' ? 'Enviado' : 'Falhou: ' + esc(s.error)}</td></tr>`).join('');
 }
 
-run(async () => { await loadStatus(); await Promise.all([loadOffers(), loadGroups()]); })();
+run(async () => {
+  await loadStatus(); await Promise.all([loadOffers(), loadGroups()]);
+  const st = state.status;
+  if (!st.zapster || !st.shopee) { document.querySelector('nav button[data-tab=config]').click(); toast('Primeiro passo: cadastre as chaves das integrações.'); }
+})();
 </script>
 </body>
 </html>

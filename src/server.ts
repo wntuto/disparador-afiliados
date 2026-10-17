@@ -6,15 +6,17 @@ import { createZapsterClient } from './zapster.ts';
 import { createDispatcher } from './dispatcher.ts';
 import { createScheduler } from './scheduler.ts';
 import { buildApp } from './app.ts';
+import { loadSettings } from './settings.ts';
 
 const repo = openDb(config.dbPath);
+loadSettings(repo, config);
 const shopee = createShopeeClient(config.shopee);
 const ml = createMlClient(config.mercadoLivre);
 const zapster = createZapsterClient(config.zapster);
-const dispatcher = createDispatcher(repo, zapster, config.zapster.sendDelayMs);
+const dispatcher = createDispatcher(repo, zapster, () => config.zapster.sendDelayMs);
 const scheduler = createScheduler(repo, dispatcher, config.timezone);
 
-const app = await buildApp({ config, repo, shopee, ml, dispatcher, scheduler });
+const app = await buildApp({ config, repo, shopee, ml, dispatcher, scheduler, zapster });
 
 if (!config.panelPassword) app.log.warn('PANEL_PASSWORD vazio: painel sem senha. Use só em ambiente local.');
 
