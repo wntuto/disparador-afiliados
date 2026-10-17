@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disparador de Ofertas</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#6b7280; --border:#e3e6eb; --accent:#ee4d2d; --ml:#ffe600; --ok:#15803d; --err:#b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111418; --card:#1a1f26; --text:#e7eaee; --muted:#9aa3ad; --border:#2b323b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:16px; border-bottom:1px solid var(--border); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  .pill { font-size:12px; padding:2px 8px; border-radius:99px; border:1px solid var(--border); color:var(--muted); }
+  .pill.on { color:var(--ok); border-color:var(--ok); }
+  nav { display:flex; gap:4px; padding:8px 16px; overflow-x:auto; }
+  nav button { background:none; border:0; padding:8px 12px; border-radius:8px; color:var(--muted); cursor:pointer; font:inherit; white-space:nowrap; }
+  nav button.active { background:var(--card); color:var(--text); box-shadow:0 0 0 1px var(--border); }
+  main { padding:16px; max-width:1000px; margin:0 auto; }
+  section { display:none; } section.active { display:block; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:15px; margin:0 0 12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
+  .row > * { flex:1 1 160px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height:140px; font-family:ui-monospace, monospace; font-size:13px; }
+  button.primary, button.sec { padding:9px 14px; border-radius:8px; border:0; cursor:pointer; font:inherit; flex:0 0 auto; }
+  button.primary { background:var(--accent); color:#fff; }
+  button.sec { background:var(--bg); color:var(--text); border:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  .tbl { overflow-x:auto; }
+  .tag { font-size:11px; padding:1px 6px; border-radius:4px; font-weight:600; }
+  .tag.shopee { background:var(--accent); color:#fff; } .tag.mercadolivre { background:var(--ml); color:#333; }
+  .ok { color:var(--ok); } .err { color:var(--err); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+  .prod { border:1px solid var(--border); border-radius:10px; padding:10px; font-size:13px; display:flex; flex-direction:column; gap:6px; }
+  .prod img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; background:var(--bg); }
+  .checks label { display:flex; gap:6px; align-items:center; font-size:14px; color:var(--text); margin:4px 0; }
+  .checks input { width:auto; }
+  pre.preview { white-space:pre-wrap; background:var(--bg); padding:12px; border-radius:8px; font-family:inherit; margin:0; }
+  #toast { position:fixed; bottom:16px; left:16px; right:16px; max-width:480px; margin:auto; padding:12px 14px; border-radius:10px; background:var(--text); color:var(--bg); display:none; }
+  .muted { color:var(--muted); font-size:13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Disparador de Ofertas</h1>
+  <span id="st-zap" class="pill">ZapsterAPI</span>
+  <span id="st-shp" class="pill">Shopee</span>
+  <span id="st-ml" class="pill">Mercado Livre</span>
+</header>
+<nav>
+  <button data-tab="ofertas" class="active">Ofertas</button>
+  <button data-tab="grupos">Grupos</button>
+  <button data-tab="disparar">Disparar agora</button>
+  <button data-tab="campanhas">Agendamentos</button>
+  <button data-tab="historico">Histórico</button>
+</nav>
+<main>
+  <section id="ofertas" class="active">
+    <div class="card">
+      <h2>Adicionar pelo link do produto</h2>
+      <div class="row">
+        <div style="flex:3 1 300px"><label>Link da Shopee ou do Mercado Livre</label><input id="imp-url" placeholder="https://shopee.com.br/... ou https://produto.mercadolivre.com.br/MLB-..."></div>
+        <button class="primary" id="imp-btn">Importar</button>
+      </div>
+      <details style="margin-top:10px"><summary class="muted">Preencher dados manualmente (opcional)</summary>
+        <div class="row" style="margin-top:8px">
+          <div><label>Título</label><input id="imp-title"></div>
+          <div><label>Preço (R$)</label><input id="imp-price" type="number" step="0.01"></div>
+          <div><label>Preço original (R$)</label><input id="imp-orig" type="number" step="0.01"></div>
+          <div><label>URL da imagem</label><input id="imp-img"></div>
+        </div>
+      </details>
+    </div>
+    <div class="card">
+      <h2>Buscar ofertas na Shopee</h2>
+      <div class="row">
+        <div style="flex:3 1 240px"><label>Palavra-chave</label><input id="sh-kw" placeholder="fone bluetooth"></div>
+        <div><label>Ordenar por</label><select id="sh-sort">
+          <option value="2">Mais vendidos</option><option value="5">Maior comissão</option>
+          <option value="1">Relevância</option><option value="4">Menor preço</option></select></div>
+        <button class="primary" id="sh-btn">Buscar</button>
+      </div>
+      <div id="sh-results" class="grid" style="margin-top:12px"></div>
+    </div>
+    <div class="card"><h2>Ofertas salvas</h2><div class="tbl"><table id="offers-tbl"></table></div></div>
+  </section>
+
+  <section id="grupos">
+    <div class="card">
+      <h2>Cadastrar grupo</h2>
+      <p class="muted">Use o ID do grupo no WhatsApp (ex.: 120363012345678901@g.us). Grupos também são cadastrados sozinhos quando chega uma mensagem neles, se o webhook da Zapster apontar para /webhooks/zapster.</p>
+      <div class="row">
+        <div><label>Nome</label><input id="g-name"></div>
+        <div style="flex:2 1 240px"><label>ID do grupo</label><input id="g-id"></div>
+        <button class="primary" id="g-btn">Salvar</button>
+      </div>
+    </div>
+    <div class="card"><div class="tbl"><table id="groups-tbl"></table></div></div>
+  </section>
+
+  <section id="disparar">
+    <div class="card">
+      <h2>Disparo manual</h2>
+      <div class="row"><div><label>Oferta</label><select id="d-offer"></select></div></div>
+      <label style="margin-top:12px">Grupos</label><div id="d-groups" class="checks"></div>
+      <label style="margin-top:12px">Mensagem (variáveis: {titulo} {preco} {preco_original} {desconto} {link} {loja})</label>
+      <textarea id="d-tpl"></textarea>
+      <div class="checks"><label><input type="checkbox" id="d-img" checked> Enviar com a foto do produto</label></div>
+      <label style="margin-top:12px">Prévia</label><pre id="d-preview" class="preview"></pre>
+      <div class="row" style="margin-top:12px"><button class="primary" id="d-btn">Disparar agora</button></div>
+    </div>
+  </section>
+
+  <section id="campanhas">
+    <div class="card">
+      <h2>Novo agendamento</h2>
+      <div class="row">
+        <div><label>Nome</label><input id="c-name" placeholder="Ofertas da manhã"></div>
+        <div><label>Tipo</label><select id="c-mode">
+          <option value="once">Uma vez, em data e hora</option>
+          <option value="recurring">Recorrente</option>
+          <option value="manual">Manual (salvar para disparar depois)</option></select></div>
+        <div id="c-when-once"><label>Quando</label><input id="c-runat" type="datetime-local"></div>
+        <div id="c-when-rec" style="display:none"><label>Repetição (cron)</label>
+          <select id="c-cron-preset">
+            <option value="0 9 * * *">Todo dia às 9h</option>
+            <option value="0 9,12,18 * * *">Todo dia às 9h, 12h e 18h</option>
+            <option value="0 */2 8-22 * *">A cada 2h, das 8h às 22h</option>
+            <option value="0 10 * * 1-5">Dias úteis às 10h</option>
+            <option value="custom">Personalizado…</option>
+          </select>
+          <input id="c-cron" style="display:none;margin-top:6px" placeholder="min hora dia mês diaSemana">
+        </div>
+      </div>
+      <p class="muted" id="c-hint">Envia todas as ofertas selecionadas para os grupos no horário escolhido.</p>
+      <label>Ofertas</label><div id="c-offers" class="checks"></div>
+      <label style="margin-top:12px">Grupos</label><div id="c-groups" class="checks"></div>
+      <div class="checks"><label><input type="checkbox" id="c-img" checked> Enviar com a foto do produto</label></div>
+      <div class="row" style="margin-top:12px"><button class="primary" id="c-btn">Salvar agendamento</button></div>
+    </div>
+    <div class="card"><div class="tbl"><table id="camps-tbl"></table></div></div>
+  </section>
+
+  <section id="historico">
+    <div class="card"><div class="tbl"><table id="sends-tbl"></table></div></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const brl = (v) => v == null ? '' : v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+const state = { offers: [], groups: [], status: {}, search: [] };
+
+function toast(msg, isErr) {
+  const t = $('#toast'); t.textContent = msg; t.style.display = 'block';
+  t.style.background = isErr ? 'var(--err)' : ''; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 5000);
+}
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json' }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) throw new Error(data.error || 'HTTP ' + res.status);
+  return data;
+}
+const run = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, true); } };
+
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button, section').forEach((x) => x.classList.remove('active'));
+  b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
+  if (b.dataset.tab === 'historico') loadSends();
+  if (b.dataset.tab === 'campanhas') loadCampaigns();
+});
+
+function checks(el, items, label) {
+  el.innerHTML = items.length ? items.map((i) => `<label><input type="checkbox" value="${i.id}"> ${label(i)}</label>`).join('') : '<span class="muted">Nada cadastrado ainda.</span>';
+}
+const checked = (el) => [...el.querySelectorAll('input:checked')].map((i) => Number(i.value));
+
+async function loadStatus() {
+  const s = state.status = await api('/api/status');
+  $('#st-zap').classList.toggle('on', s.zapster && s.zapsterInstance);
+  $('#st-shp').classList.toggle('on', s.shopee);
+  $('#st-ml').classList.toggle('on', s.mercadoLivreTag);
+  if (!$('#d-tpl').value) $('#d-tpl').value = s.defaultTemplate;
+}
+
+async function loadOffers() {
+  state.offers = await api('/api/offers');
+  $('#offers-tbl').innerHTML = '<tr><th></th><th>Produto</th><th>Preço</th><th>Link de afiliado</th><th></th></tr>' + state.offers.map((o) => `
+    <tr><td><span class="tag ${o.platform}">${o.platform === 'shopee' ? 'Shopee' : 'ML'}</span></td>
+    <td>${esc(o.title)}${o.commission_rate ? `<div class="muted">comissão ${(o.commission_rate * 100).toFixed(1)}%</div>` : ''}</td>
+    <td>${brl(o.price)}</td><td><a href="${esc(o.affiliate_link)}" target="_blank" rel="noopener">abrir</a></td>
+    <td><button class="sec" onclick="delOffer(${o.id})">Excluir</button></td></tr>`).join('');
+  $('#d-offer').innerHTML = state.offers.map((o) => `<option value="${o.id}">${esc(o.title)}</option>`).join('');
+  checks($('#c-offers'), state.offers, (o) => `<span class="tag ${o.platform}">${o.platform === 'shopee' ? 'Shopee' : 'ML'}</span> ${esc(o.title)}`);
+  preview();
+}
+window.delOffer = run(async (id) => { if (confirm('Excluir oferta?')) { await api('/api/offers/' + id, { method:'DELETE' }); loadOffers(); } });
+
+async function loadGroups() {
+  state.groups = await api('/api/groups');
+  $('#groups-tbl').innerHTML = '<tr><th>Nome</th><th>ID</th><th>Ativo</th><th></th></tr>' + state.groups.map((g) => `
+    <tr><td>${esc(g.name)}</td><td class="muted">${esc(g.recipient)}</td>
+    <td><input type="checkbox" ${g.active ? 'checked' : ''} onchange="toggleGroup(${g.id}, this.checked)"></td>
+    <td><button class="sec" onclick="delGroup(${g.id})">Excluir</button></td></tr>`).join('');
+  const active = state.groups.filter((g) => g.active);
+  checks($('#d-groups'), active, (g) => esc(g.name));
+  checks($('#c-groups'), active, (g) => esc(g.name));
+}
+window.toggleGroup = run(async (id, active) => { await api('/api/groups/' + id, { method:'PATCH', body:{ active } }); loadGroups(); });
+window.delGroup = run(async (id) => { if (confirm('Excluir grupo?')) { await api('/api/groups/' + id, { method:'DELETE' }); loadGroups(); } });
+
+$('#g-btn').onclick = run(async () => {
+  await api('/api/groups', { method:'POST', body:{ name: $('#g-name').value, recipient: $('#g-id').value } });
+  $('#g-name').value = $('#g-id').value = ''; toast('Grupo salvo'); loadGroups();
+});
+
+$('#imp-btn').onclick = run(async () => {
+  const num = (s) => $(s).value ? Number($(s).value) : undefined;
+  const body = { url: $('#imp-url').value.trim(), title: $('#imp-title').value || undefined, price: num('#imp-price'), original_price: num('#imp-orig'), image_url: $('#imp-img').value || undefined };
+  const o = await api('/api/offers/import', { method:'POST', body });
+  ['#imp-url','#imp-title','#imp-price','#imp-orig','#imp-img'].forEach((s) => $(s).value = '');
+  toast('Oferta salva: ' + o.title); loadOffers();
+});
+
+$('#sh-btn').onclick = run(async () => {
+  const r = await api(`/api/shopee/search?keyword=${encodeURIComponent($('#sh-kw').value)}&sortType=${$('#sh-sort').value}&limit=20`);
+  state.search = r.items;
+  $('#sh-results').innerHTML = r.items.map((p, i) => `<div class="prod">
+    ${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy">` : ''}
+    <strong>${esc(p.productName)}</strong>
+    <span>${brl(p.priceMin ?? p.price)} · ${p.sales ?? 0} vendidos</span>
+    <span class="muted">comissão ${p.commissionRate ? (p.commissionRate * 100).toFixed(1) + '%' : '?'}</span>
+    <button class="sec" onclick="saveShopee(${i})">Salvar oferta</button></div>`).join('') || '<span class="muted">Nenhum resultado.</span>';
+});
+window.saveShopee = run(async (i) => { await api('/api/offers/shopee', { method:'POST', body: state.search[i] }); toast('Oferta salva'); loadOffers(); });
+
+const preview = run(async () => {
+  const id = Number($('#d-offer').value); if (!id) { $('#d-preview').textContent = ''; return; }
+  const r = await api('/api/preview', { method:'POST', body:{ offer_id: id, template: $('#d-tpl').value } });
+  $('#d-preview').textContent = r.text;
+});
+$('#d-offer').onchange = preview; $('#d-tpl').oninput = () => { clearTimeout(preview._h); preview._h = setTimeout(preview, 300); };
+
+$('#d-btn').onclick = run(async () => {
+  const group_ids = checked($('#d-groups'));
+  if (!group_ids.length) throw new Error('Selecione ao menos um grupo');
+  if (!confirm(`Enviar para ${group_ids.length} grupo(s) agora?`)) return;
+  $('#d-btn').disabled = true;
+  try {
+    const r = await api('/api/send', { method:'POST', body:{ offer_id: Number($('#d-offer').value), group_ids, template: $('#d-tpl').value, send_image: $('#d-img').checked } });
+    toast(`${r.sent} enviado(s), ${r.failed} falha(s)${r.errors.length ? ': ' + r.errors.join('; ') : ''}`, r.failed > 0);
+  } finally { $('#d-btn').disabled = false; }
+});
+
+const hints = { once:'Envia todas as ofertas selecionadas para os grupos no horário escolhido.', recurring:'A cada execução envia a próxima oferta da lista, em rodízio, para não repetir a mesma.', manual:'Fica salvo para você disparar com um clique quando quiser.' };
+$('#c-mode').onchange = () => {
+  const m = $('#c-mode').value;
+  $('#c-when-once').style.display = m === 'once' ? '' : 'none';
+  $('#c-when-rec').style.display = m === 'recurring' ? '' : 'none';
+  $('#c-hint').textContent = hints[m];
+};
+$('#c-cron-preset').onchange = () => $('#c-cron').style.display = $('#c-cron-preset').value === 'custom' ? '' : 'none';
+
+$('#c-btn').onclick = run(async () => {
+  const mode = $('#c-mode').value;
+  const body = { name: $('#c-name').value, mode, offer_ids: checked($('#c-offers')), group_ids: checked($('#c-groups')), send_image: $('#c-img').checked, template: $('#d-tpl').value || null };
+  if (mode === 'once') { if (!$('#c-runat').value) throw new Error('Escolha data e hora'); body.run_at = new Date($('#c-runat').value).toISOString(); }
+  if (mode === 'recurring') body.cron = $('#c-cron-preset').value === 'custom' ? $('#c-cron').value : $('#c-cron-preset').value;
+  await api('/api/campaigns', { method:'POST', body }); toast('Agendamento salvo'); loadCampaigns();
+});
+
+const modeLabel = { once:'Uma vez', recurring:'Recorrente', manual:'Manual' };
+async function loadCampaigns() {
+  const cs = await api('/api/campaigns');
+  $('#camps-tbl').innerHTML = '<tr><th>Nome</th><th>Tipo</th><th>Quando</th><th>Ofertas / grupos</th><th>Ativo</th><th></th></tr>' + cs.map((c) => `
+    <tr><td>${esc(c.name)}</td><td>${modeLabel[c.mode]}</td>
+    <td class="muted">${c.mode === 'once' ? new Date(c.run_at).toLocaleString('pt-BR') : c.mode === 'recurring' ? esc(c.cron) : '-'}${c.last_run_at ? `<div>última: ${new Date(c.last_run_at + 'Z').toLocaleString('pt-BR')}</div>` : ''}</td>
+    <td>${c.offer_ids.length} / ${c.group_ids.length}</td>
+    <td><input type="checkbox" ${c.active ? 'checked' : ''} onchange="toggleCamp(${c.id}, this.checked)"></td>
+    <td style="white-space:nowrap"><button class="sec" onclick="runCamp(${c.id})">Disparar</button> <button class="sec" onclick="delCamp(${c.id})">Excluir</button></td></tr>`).join('');
+}
+window.toggleCamp = run(async (id, active) => { await api('/api/campaigns/' + id, { method:'PATCH', body:{ active } }); loadCampaigns(); });
+window.delCamp = run(async (id) => { if (confirm('Excluir agendamento?')) { await api('/api/campaigns/' + id, { method:'DELETE' }); loadCampaigns(); } });
+window.runCamp = run(async (id) => {
+  if (!confirm('Disparar este agendamento agora?')) return;
+  const r = await api(`/api/campaigns/${id}/run`, { method:'POST' });
+  toast(`${r.sent} enviado(s), ${r.failed} falha(s)`, r.failed > 0); loadCampaigns();
+});
+
+async function loadSends() {
+  const ss = await api('/api/sends');
+  $('#sends-tbl').innerHTML = '<tr><th>Quando</th><th>Oferta</th><th>Grupo</th><th>Status</th></tr>' + ss.map((s) => `
+    <tr><td class="muted">${new Date(s.created_at + 'Z').toLocaleString('pt-BR')}</td>
+    <td><span class="tag ${s.platform}">${s.platform === 'shopee' ? 'Shopee' : 'ML'}</span> ${esc(s.offer_title)}</td>
+    <td>${esc(s.group_name)}</td>
+    <td class="${s.status === 'sent' ? 'ok' : 'err'}">${s.status === 'sent' ? 'Enviado' : 'Falhou: ' + esc(s.error)}</td></tr>`).join('');
+}
+
+run(async () => { await loadStatus(); await Promise.all([loadOffers(), loadGroups()]); })();
+</script>
+</body>
+</html>
